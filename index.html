@@ -616,51 +616,75 @@
             const n = LEVELS[levelIndex];
             const text = String(n);
 
+            // Clip radius keeps the glow near the center only.
+            // Use a fraction of the ring or screen so it works on any device.
+            const clipR = Math.min(RING_RADIUS * 0.72, Math.min(W, H) * 0.34);
+
             ctx.save();
+            // Clip the glow so it can't drift to the bottom node on mobile
+            ctx.beginPath();
+            ctx.arc(CENTER.x, CENTER.y, clipR, 0, Math.PI * 2);
+            ctx.clip();
+
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
-            // Scale font with screen so it stays dramatic
+
+            // Scale font with screen
             const base = Math.min(W, H);
             const fontPx = Math.max(120, Math.floor(base * 0.28));
             ctx.font = `900 ${fontPx}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
 
             if (!completed) {
                 const pulse = (Math.sin(t * 0.004) + 1) / 2;
-                const glow = 20 + pulse * 24;
+                // Slightly reduce blur on mobile/HiDPI for perf and to limit spread
+                const glow = (20 + pulse * 24) * (DPR > 1 ? 0.85 : 1);
+
                 const grad = ctx.createLinearGradient(CENTER.x - 120, CENTER.y - 120, CENTER.x + 120, CENTER.y + 120);
                 grad.addColorStop(0, "rgba(110,220,255,0.35)");
                 grad.addColorStop(1, "rgba(120,120,255,0.35)");
                 ctx.fillStyle = grad;
+
                 ctx.shadowColor = "rgba(120,200,255,0.9)";
-                ctx.shadowBlur = glow; // keep dramatic; could sb(glow) if needed
+                ctx.shadowBlur = glow;
+
+                // Fill + strokes
                 ctx.globalAlpha = 0.85 * 0.25;
                 ctx.fillText(text, CENTER.x, CENTER.y);
+
                 ctx.globalAlpha = 0.35; ctx.lineWidth = 6; ctx.strokeStyle = "rgba(200,240,255,0.9)";
                 ctx.strokeText(text, CENTER.x, CENTER.y);
+
                 ctx.globalAlpha = 0.5; ctx.lineWidth = 2; ctx.strokeStyle = "rgba(255,255,255,0.9)";
                 ctx.strokeText(text, CENTER.x, CENTER.y);
+
             } else {
                 const pulse = (Math.sin(t * 0.012) + 1) / 2;
-                const glow = 40 + pulse * 40;
+                const glow = (40 + pulse * 40) * (DPR > 1 ? 0.85 : 1);
                 const scale = 1 + pulse * 0.02;
-                ctx.translate(CENTER.x, CENTER.y); ctx.scale(scale, scale);
+
+                ctx.translate(CENTER.x, CENTER.y);
+                ctx.scale(scale, scale);
+
                 const grad = ctx.createLinearGradient(-120, -120, 120, 120);
                 grad.addColorStop(0, "rgba(255,170,70,0.55)");
                 grad.addColorStop(1, "rgba(255,80,40,0.55)");
                 ctx.fillStyle = grad;
+
                 ctx.shadowColor = "rgba(255,120,40,0.95)";
-                ctx.shadowBlur = glow; // big win glow
+                ctx.shadowBlur = glow;
+
                 ctx.globalAlpha = 0.9;
                 ctx.fillText(text, 0, 0);
+
                 ctx.globalAlpha = 0.8; ctx.lineWidth = 8; ctx.strokeStyle = "rgba(255,220,180,0.95)";
                 ctx.strokeText(text, 0, 0);
+
                 ctx.globalAlpha = 1; ctx.lineWidth = 2; ctx.strokeStyle = "rgba(255,255,255,0.9)";
                 ctx.strokeText(text, 0, 0);
             }
 
             ctx.restore();
         }
-
         // ---------- Arrows draw ----------
         function drawArrows() {
             if (rightArrowVisible()) drawArrow(rightArrowRect(), +1);
