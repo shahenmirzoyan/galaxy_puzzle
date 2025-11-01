@@ -63,18 +63,26 @@
 
         #hud {
             position: fixed;
-            top: 12px;
-            left: 180px;
-            right: 12px;
+            left: 0;
+            right: 0;
+            top: clamp(4px, 2vh, 28px);
             display: flex;
-            gap: 16px;
-            align-items: center;
+            justify-content: center;
+            text-align: center;
             opacity: .9;
             text-shadow: 0 1px 2px rgba(0, 0, 0, .5);
             pointer-events: none;
             z-index: 9;
-            font-size: 14px;
+            font-size: 15px;
+            padding: 0 12px;
         }
+
+        #hud #msg {
+            max-width: min(88vw, 720px);
+            display: inline-block;
+            line-height: 1.3;
+        }
+
 
         /* Small screens: stack buttons, keep HUD readable */
         @media (max-width: 480px) {
@@ -83,14 +91,9 @@
                 left: 8px;
             }
 
-            #mute {
-                top: 52px;
-                left: 8px;
-            }
-
             #hud {
-                left: 8px;
-                right: 8px;
+                top: clamp(64px, 10vh, 96px);
+                /* sits comfortably below reset button */
                 font-size: 13px;
             }
         }
@@ -99,7 +102,6 @@
 
 <body>
     <button id="reset" class="btn" type="button">Reset</button>
-    <button id="mute" class="btn" type="button">🔊</button>
 
     <div id="hud">
         <span id="msg">Wake up all the planets! Tap a planet to toggle it and its neighbors.</span>
@@ -176,7 +178,6 @@
 
         // DOM
         const resetBtn = document.getElementById("reset");
-        const muteBtn = document.getElementById("mute");
         const statusEl = document.getElementById("status");
         const msgEl = document.getElementById("msg");
 
@@ -601,7 +602,6 @@
         }, { passive: false });
 
         resetBtn.addEventListener("click", () => startLevel());
-        muteBtn.addEventListener("click", () => { mute = !mute; muteBtn.textContent = mute ? "🔇" : "🔊"; });
 
         function hitTest(mx, my) {
             const R = PLANET_R + 10, R2 = R * R;
