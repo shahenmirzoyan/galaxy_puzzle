@@ -131,19 +131,15 @@
             const cssH = Math.max(280, Math.floor(window.innerHeight));
             W = cssW; H = cssH;
 
-            // Clamp DPR for perf on very high-DPI screens
             DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
 
-            // Backing store size
             canvas.style.width = cssW + "px";
             canvas.style.height = cssH + "px";
             canvas.width = Math.floor(cssW * DPR);
             canvas.height = Math.floor(cssH * DPR);
 
-            // Map drawing units to CSS pixels
             ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
 
-            // Layout recompute
             CENTER.x = W / 2;
             CENTER.y = H / 2;
             RING_RADIUS = clampRadius();
@@ -152,8 +148,7 @@
             ARROW_H = Math.max(70, Math.min(100, H * 0.18));
             computePositions();
 
-            // Rebuild star field to match new size/density
-            initStars();
+            initStars(); // rebuild star field to match new size/density
         }
 
         // ---------- Config ----------
@@ -163,7 +158,6 @@
         const LEVELS = [6, 7];
         const NEIGHBOR_DELAY_MS = 260;
 
-        // Arrow hit areas
         // Arrow hit areas (scale with screen)
         let ARROW_W = Math.max(40, Math.min(56, W * 0.06));
         let ARROW_H = Math.max(70, Math.min(100, H * 0.18));
@@ -198,6 +192,10 @@
         let completed = false;
         let moves = 0;
         let shakeT = 0;
+
+        // Lock input during neighbor animations
+        let isAnimating = false;
+        let pendingTimers = [];
 
         // FX
         const shockwaves = [];
@@ -293,19 +291,17 @@
         }
 
         function drawBackground(dt) {
-            // nebula gradient
             const g = ctx.createRadialGradient(CENTER.x, CENTER.y, 60, CENTER.x, CENTER.y, Math.max(W, H));
             g.addColorStop(0, "#0e1020"); g.addColorStop(0.5, "#0a0f26"); g.addColorStop(1, "#070a14");
             ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
 
-            // star field (parallax + twinkle, drawn with glow sprites)
             for (const s of stars) {
                 const speed = (s.layer === 1 ? 0.006 : s.layer === 2 ? 0.012 : 0.02);
                 s.x -= speed * dt * (DPR > 1 ? 1.1 : 1.0);
                 if (s.x < -4) s.x += W + 8;
 
                 const tw = (Math.sin(t * 0.004 + s.tw) * 0.5 + 0.5);
-                const alpha = 0.25 + tw * (0.25 + 0.15 * s.layer); // brighter for closer layer
+                const alpha = 0.25 + tw * (0.25 + 0.15 * s.layer);
                 ctx.globalAlpha = alpha;
 
                 const spr = getStarSprite(s.size);
@@ -314,7 +310,6 @@
             }
             ctx.globalAlpha = 1;
 
-            // vignette
             const v = ctx.createRadialGradient(CENTER.x, CENTER.y, 0, CENTER.x, CENTER.y, Math.hypot(W, H) / 1.2);
             v.addColorStop(0, "rgba(0,0,0,0)"); v.addColorStop(1, "rgba(0,0,0,0.35)");
             ctx.fillStyle = v; ctx.fillRect(0, 0, W, H);
@@ -366,82 +361,52 @@
             ctx.restore();
         }
 
-        // ---------- FX (update + draw) ----------
         // ---------- FX (shorter, lighter) ----------
-        // Shockwave: smaller start, faster growth, faster fade
-        function addShockwave(x, y) {
-            shockwaves.push({ x, y, r: PLANET_R * 0.7, alpha: 0.55 });
-        }
-
-        // Sparks: fewer particles, shorter life
+        function addShockwave(x, y) { shockwaves.push({ x, y, r: PLANET_R * 0.7, alpha: 0.55 }); }
         function addSparks(x, y, warm) {
-            const n = 8; // was 16
+            const n = 8;
             for (let i = 0; i < n; i++) {
                 const ang = (Math.PI * 2 * i) / n + Math.random() * 0.6;
-                const sp = 1.0 + Math.random() * 1.4; // slightly lower speed
-                sparks.push({
-                    x, y,
-                    vx: Math.cos(ang) * sp,
-                    vy: Math.sin(ang) * sp,
-                    warm,
-                    life: 0.9,                  // shorter lifetime (seconds-ish)
-                    color: warm ? "#ffd2a0" : "#bfe0ff",
-                    confetti: false,
-                    rot: 0
-                });
+                const sp = 1.0 + Math.random() * 1.4;
+                sparks.push({ x, y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, warm, life: 0.9, color: warm ? "#ffd2a0" : "#bfe0ff", confetti: false, rot: 0 });
             }
         }
-
-        // Update: time-based fade so it’s consistent across devices
         function updateFX(dt) {
-            // Shockwaves fade quickly and grow quickly
             for (let i = shockwaves.length - 1; i >= 0; i--) {
                 const s = shockwaves[i];
-                s.r += 240 * dt / 1000;                   // was 120
-                s.alpha *= Math.pow(0.3, dt / 260);       // exponential fade; ~260ms half/third-life
+                s.r += 240 * dt / 1000;
+                s.alpha *= Math.pow(0.3, dt / 260);
                 if (s.alpha < 0.05) shockwaves.splice(i, 1);
             }
-
-            // Sparks: heavier damping + quicker life drop
             for (let i = sparks.length - 1; i >= 0; i--) {
                 const p = sparks[i];
                 p.x += p.vx * dt / 18;
                 p.y += p.vy * dt / 18;
-                // stronger damping so they don't travel far
                 const damp = Math.pow(0.4, dt / 280);
                 p.vx *= damp; p.vy *= damp;
-                p.life -= dt / 220;                         // ~0.22s typical
+                p.life -= dt / 220;
                 if (p.life <= 0) sparks.splice(i, 1);
             }
-
-            // Completion rings unchanged (if you want those shorter too, tell me)
             for (let i = winRings.length - 1; i >= 0; i--) {
                 const r = winRings[i];
                 r.r += 200 * dt / 1000;
                 r.alpha *= 0.985;
                 if (r.alpha < 0.02) winRings.splice(i, 1);
             }
-
-            // Keep particle count in check
             if (sparks.length > MAX_PARTICLES) sparks.splice(0, sparks.length - MAX_PARTICLES);
             if (shakeT > 0) shakeT -= dt;
         }
-
-        // Draw: lower blur & line width so it’s lighter on tablets/phones
         function drawFX() {
-            // Shockwaves
             for (const s of shockwaves) {
                 ctx.save();
-                ctx.lineWidth = 2;                          // was 3
+                ctx.lineWidth = 2;
                 ctx.globalAlpha = s.alpha;
                 ctx.strokeStyle = "rgba(180,210,255,0.8)";
-                ctx.shadowBlur = sb(12);                    // was 18
+                ctx.shadowBlur = sb(12);
                 ctx.shadowColor = "rgba(160,190,255,0.8)";
                 ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2); ctx.stroke();
                 ctx.restore();
             }
-
-            // Completion radiating rings (kept dramatic)
             for (const r of winRings) {
                 ctx.save();
                 ctx.globalAlpha = r.alpha;
@@ -452,20 +417,16 @@
                 ctx.beginPath(); ctx.arc(CENTER.x, CENTER.y, r.r, 0, Math.PI * 2); ctx.stroke();
                 ctx.restore();
             }
-
-            // Sparks
             for (const p of sparks) {
                 ctx.save();
                 ctx.globalAlpha = Math.max(0, p.life);
                 ctx.fillStyle = p.color;
-                ctx.shadowBlur = sb(6);                     // was 10
+                ctx.shadowBlur = sb(6);
                 ctx.shadowColor = p.warm ? "rgba(255,180,120,.8)" : "rgba(160,200,255,.8)";
                 ctx.fillRect(p.x, p.y, 2, 2);
                 ctx.restore();
             }
         }
-
-
 
         // ---------- Pulses (visual signals) ----------
         function addPulse(a, b, durMs = NEIGHBOR_DELAY_MS) { pulses.push({ a, b, u: 0, durMs }); }
@@ -489,6 +450,21 @@
             ctx.restore();
         }
 
+        // ---------- Timers helper ----------
+        function addTimer(fn, ms) {
+            const id = setTimeout(() => {
+                // remove from pending on fire
+                pendingTimers = pendingTimers.filter(x => x !== id);
+                fn();
+            }, ms);
+            pendingTimers.push(id);
+            return id;
+        }
+        function clearAllTimers() {
+            for (const id of pendingTimers) clearTimeout(id);
+            pendingTimers = [];
+        }
+
         // ---------- Game logic ----------
         function setMessage() {
             msgEl.textContent = completed
@@ -496,6 +472,10 @@
                 : "Wake up all the planets! Tap a planet to toggle it and its neighbors.";
         }
         function startLevel() {
+            // Cancel any in-flight animations/timeouts and unlock input
+            clearAllTimers();
+            isAnimating = false;
+
             NUM_NODES = LEVELS[levelIndex];
             RING_RADIUS = clampRadius();
             nodes = new Array(NUM_NODES).fill(0);
@@ -517,27 +497,40 @@
             nodes[idx] ^= 1;
         }
 
+        // Lock input while neighbor toggles animate; only check win after they complete.
         function toggleAt(i) {
-            if (completed) return;
+            if (completed || isAnimating) return; // <- prevents double taps during animation
             resumeAC();
-            toggleIndex(i);
+
+            isAnimating = true; // lock input immediately
+            toggleIndex(i);     // toggle the tapped node right away
+
             const L = toIndex(i - 1), R = toIndex(i + 1);
             addPulse(i, L); addPulse(i, R);
-            setTimeout(() => { toggleIndex(L); checkWin(); }, NEIGHBOR_DELAY_MS);
-            setTimeout(() => { toggleIndex(R); checkWin(); }, NEIGHBOR_DELAY_MS);
-            moves++; statusEl.textContent = `Moves: ${moves}`;
-            shakeT = SHAKE_FOR;
-            checkWin();
+
+            // Schedule neighbors after the visual pulse delay
+            addTimer(() => { toggleIndex(L); }, NEIGHBOR_DELAY_MS);
+            addTimer(() => { toggleIndex(R); }, NEIGHBOR_DELAY_MS);
+
+            // After neighbors are done, then count the move, unlock, and check win.
+            addTimer(() => {
+                moves++;
+                statusEl.textContent = `Moves: ${moves}`;
+                shakeT = SHAKE_FOR;
+                isAnimating = false;     // unlock input AFTER animation completes
+                checkWin();              // win check only here, never earlier
+            }, NEIGHBOR_DELAY_MS + 5); // small buffer to ensure both toggles landed
         }
 
         function triggerWinFX() {
             for (let k = 0; k < 3; k++) { winRings.push({ r: 40 + k * 28, alpha: 0.9 }); }
             let bursts = 4;
-            const spawn = () => { if (bursts-- <= 0) return; winRings.push({ r: 40, alpha: 0.9 }); setTimeout(spawn, 180); };
-            setTimeout(spawn, 180);
+            const spawn = () => { if (bursts-- <= 0) return; winRings.push({ r: 40, alpha: 0.9 }); addTimer(spawn, 180); };
+            addTimer(spawn, 180);
             winJingle();
         }
 
+        // Only declare victory when all nodes are ON, and only called after animations finish
         function checkWin() {
             if (!completed && nodes.every(v => v === 1)) {
                 completed = true;
@@ -587,8 +580,10 @@
 
         canvas.addEventListener("click", (e) => {
             const { x: mx, y: my } = localXY(e);
-            if (rightArrowVisible() && hitInRect(mx, my, rightArrowRect())) { levelIndex = 1; startLevel(); return; }
-            if (leftArrowVisible() && hitInRect(mx, my, leftArrowRect())) { levelIndex = 0; startLevel(); return; }
+            // block navigation during animations too
+            if (!isAnimating && rightArrowVisible() && hitInRect(mx, my, rightArrowRect())) { levelIndex = 1; startLevel(); return; }
+            if (!isAnimating && leftArrowVisible() && hitInRect(mx, my, leftArrowRect())) { levelIndex = 0; startLevel(); return; }
+            if (isAnimating) return;
             const idx = hitTest(mx, my);
             if (idx !== -1) toggleAt(idx);
         });
@@ -598,8 +593,9 @@
             const touch = e.changedTouches[0];
             const r = canvas.getBoundingClientRect();
             const mx = touch.clientX - r.left, my = touch.clientY - r.top;
-            if (rightArrowVisible() && hitInRect(mx, my, rightArrowRect())) { levelIndex = 1; startLevel(); return; }
-            if (leftArrowVisible() && hitInRect(mx, my, leftArrowRect())) { levelIndex = 0; startLevel(); return; }
+            if (!isAnimating && rightArrowVisible() && hitInRect(mx, my, rightArrowRect())) { levelIndex = 1; startLevel(); return; }
+            if (!isAnimating && leftArrowVisible() && hitInRect(mx, my, leftArrowRect())) { levelIndex = 0; startLevel(); return; }
+            if (isAnimating) return;
             const idx = hitTest(mx, my);
             if (idx !== -1) toggleAt(idx);
         }, { passive: false });
@@ -616,17 +612,14 @@
             return -1;
         }
 
-        // ---------- Neon Level Number (changes on win) ----------
+        // ---------- Neon Level Number (clipped so glow can't "escape") ----------
         function drawLevelNumber() {
             const n = LEVELS[levelIndex];
             const text = String(n);
 
-            // Clip radius keeps the glow near the center only.
-            // Use a fraction of the ring or screen so it works on any device.
             const clipR = Math.min(RING_RADIUS * 0.72, Math.min(W, H) * 0.34);
 
             ctx.save();
-            // Clip the glow so it can't drift to the bottom node on mobile
             ctx.beginPath();
             ctx.arc(CENTER.x, CENTER.y, clipR, 0, Math.PI * 2);
             ctx.clip();
@@ -634,14 +627,12 @@
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
 
-            // Scale font with screen
             const base = Math.min(W, H);
             const fontPx = Math.max(120, Math.floor(base * 0.28));
             ctx.font = `900 ${fontPx}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
 
             if (!completed) {
                 const pulse = (Math.sin(t * 0.004) + 1) / 2;
-                // Slightly reduce blur on mobile/HiDPI for perf and to limit spread
                 const glow = (20 + pulse * 24) * (DPR > 1 ? 0.85 : 1);
 
                 const grad = ctx.createLinearGradient(CENTER.x - 120, CENTER.y - 120, CENTER.x + 120, CENTER.y + 120);
@@ -652,7 +643,6 @@
                 ctx.shadowColor = "rgba(120,200,255,0.9)";
                 ctx.shadowBlur = glow;
 
-                // Fill + strokes
                 ctx.globalAlpha = 0.85 * 0.25;
                 ctx.fillText(text, CENTER.x, CENTER.y);
 
@@ -690,6 +680,7 @@
 
             ctx.restore();
         }
+
         // ---------- Arrows draw ----------
         function drawArrows() {
             if (rightArrowVisible()) drawArrow(rightArrowRect(), +1);
@@ -718,7 +709,7 @@
 
             drawPulses();
             drawFX();
-            drawArrows(); // arrows render on top
+            drawArrows();
 
             ctx.restore();
             requestAnimationFrame(frame);
@@ -726,8 +717,8 @@
 
         // ---------- Init ----------
         function ready() {
-            resizeCanvas();                       // size to screen + compute positions + stars
-            startLevel();                         // all OFF, level 1 (6)
+            resizeCanvas();
+            startLevel();  // all OFF, level 1 (6)
             requestAnimationFrame(frame);
         }
         ready();
