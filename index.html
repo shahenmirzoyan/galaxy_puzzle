@@ -148,6 +148,8 @@
             CENTER.y = H / 2;
             RING_RADIUS = clampRadius();
             recomputePlanetR();
+            ARROW_W = Math.max(40, Math.min(56, W * 0.06));
+            ARROW_H = Math.max(70, Math.min(100, H * 0.18));
             computePositions();
 
             // Rebuild star field to match new size/density
@@ -162,7 +164,10 @@
         const NEIGHBOR_DELAY_MS = 260;
 
         // Arrow hit areas
-        const ARROW_W = 64, ARROW_H = 120, ARROW_PAD = 18;
+        // Arrow hit areas (scale with screen)
+        let ARROW_W = Math.max(40, Math.min(56, W * 0.06));
+        let ARROW_H = Math.max(70, Math.min(100, H * 0.18));
+        const ARROW_PAD = 16;
 
         // Colors
         const COLOR_ON_BASE = "#ffb36b";
