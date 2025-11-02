@@ -57,10 +57,6 @@
             left: 12px;
         }
 
-        #mute {
-            left: 104px;
-        }
-
         #hud {
             position: fixed;
             left: 0;
@@ -82,7 +78,6 @@
             display: inline-block;
             line-height: 1.3;
         }
-
 
         /* Small screens: stack buttons, keep HUD readable */
         @media (max-width: 480px) {
@@ -157,7 +152,8 @@
         const EDGE_COLOR = "rgba(120,170,255,0.35)";
         const SHAKE_FOR = 90;
         const MAX_PARTICLES = 1200;
-        const LEVELS = [6, 7];
+        // Levels now support 6..15 nodes
+        const LEVELS = Array.from({ length: 10 }, (_, i) => 6 + i); // [6,7,8,9,10,11,12,13,14,15]
         const NEIGHBOR_DELAY_MS = 260;
 
         // Arrow hit areas (scale with screen)
@@ -542,8 +538,14 @@
         }
 
         // ---------- Arrows ----------
-        function rightArrowVisible() { return levelIndex === 0 && completed; } // level 6 after completion
-        function leftArrowVisible() { return levelIndex === 1; }              // level 7 always
+        // Right arrow appears after completion, unless on last level.
+        function rightArrowVisible() {
+            return completed && levelIndex < LEVELS.length - 1;
+        }
+        // Left arrow appears on any level after the first.
+        function leftArrowVisible() {
+            return levelIndex > 0;
+        }
         function rightArrowRect() { return { x: W - ARROW_W - ARROW_PAD, y: (H - ARROW_H) / 2, w: ARROW_W, h: ARROW_H }; }
         function leftArrowRect() { return { x: ARROW_PAD, y: (H - ARROW_H) / 2, w: ARROW_W, h: ARROW_H }; }
 
@@ -582,8 +584,16 @@
         canvas.addEventListener("click", (e) => {
             const { x: mx, y: my } = localXY(e);
             // block navigation during animations too
-            if (!isAnimating && rightArrowVisible() && hitInRect(mx, my, rightArrowRect())) { levelIndex = 1; startLevel(); return; }
-            if (!isAnimating && leftArrowVisible() && hitInRect(mx, my, leftArrowRect())) { levelIndex = 0; startLevel(); return; }
+            if (!isAnimating && rightArrowVisible() && hitInRect(mx, my, rightArrowRect())) {
+                levelIndex = Math.min(levelIndex + 1, LEVELS.length - 1);
+                startLevel();
+                return;
+            }
+            if (!isAnimating && leftArrowVisible() && hitInRect(mx, my, leftArrowRect())) {
+                levelIndex = Math.max(levelIndex - 1, 0);
+                startLevel();
+                return;
+            }
             if (isAnimating) return;
             const idx = hitTest(mx, my);
             if (idx !== -1) toggleAt(idx);
@@ -594,8 +604,16 @@
             const touch = e.changedTouches[0];
             const r = canvas.getBoundingClientRect();
             const mx = touch.clientX - r.left, my = touch.clientY - r.top;
-            if (!isAnimating && rightArrowVisible() && hitInRect(mx, my, rightArrowRect())) { levelIndex = 1; startLevel(); return; }
-            if (!isAnimating && leftArrowVisible() && hitInRect(mx, my, leftArrowRect())) { levelIndex = 0; startLevel(); return; }
+            if (!isAnimating && rightArrowVisible() && hitInRect(mx, my, rightArrowRect())) {
+                levelIndex = Math.min(levelIndex + 1, LEVELS.length - 1);
+                startLevel();
+                return;
+            }
+            if (!isAnimating && leftArrowVisible() && hitInRect(mx, my, leftArrowRect())) {
+                levelIndex = Math.max(levelIndex - 1, 0);
+                startLevel();
+                return;
+            }
             if (isAnimating) return;
             const idx = hitTest(mx, my);
             if (idx !== -1) toggleAt(idx);
@@ -718,7 +736,7 @@
         // ---------- Init ----------
         function ready() {
             resizeCanvas();
-            startLevel();  // all OFF, level 1 (6)
+            startLevel();  // all OFF, start at level 1 (6 nodes)
             requestAnimationFrame(frame);
         }
         ready();
